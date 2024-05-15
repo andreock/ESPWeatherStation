@@ -1,0 +1,47 @@
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - $PWD/mosquitto/config:/mosquitto/config
+  influxdb:
+    image: influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    environment:
+      # - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=qwe123123
+      - DOCKER_INFLUXDB_INIT_ORG=andreock
+      - DOCKER_INFLUXDB_INIT_BUCKET=weatherstation
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=qwe123123
+      - V1_DB_NAME=sensors_data
+      - V1_RP_NAME=v1-rp
+      # - INFLUX_TOKEN=qwe123
+  telegraf:
+    image: telegraf
+    ports:
+      - "8125:8125/udp"
+      - "8092:8092"
+      - "8094:8094"
+    volumes:
+      - $PWD/telegraf/:/etc/telegraf/
+    links:
+      - "influxdb:telegraf"
+      - "mqtt-broker:telegraf"
+  grafana:
+    image: grafana/grafana-oss
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    links:
+      - "influxdb:grafana"
+
+volumes:
+  influxdb_data:
+  grafana_data:
