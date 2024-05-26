@@ -13,13 +13,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
- 
+
 #include <Adafruit_BMP085.h>
 #include <Wire.h>
 #include "mqtt_client.h"
 
 #include "DHT.h"
 #include "MiCS4514.hpp"
+#include "pmsx003.hpp"
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include "config.h"
@@ -27,6 +28,7 @@
 DHT dht(DHTPIN, DHTTYPE);
 Adafruit_BMP085 bmp;
 MiCS4514 mics4514(PRE_PIN, NOX_PIN, RED_PIN);
+pmsx003 sensor;
 esp_mqtt_client_handle_t mqtt_client;
 
 void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
@@ -85,22 +87,36 @@ void setup() {
   }
   mics4514.begin();
   dht.begin();
+  // sensor baud rate is 9600
+  Serial2.begin(9600);
+  sensor.begin(&Serial2);
   mqtt_app_start();
 }
 
-void send_sensor_data(float temperature, float humidity, int pressure, float nox, float co) {
+void send_sensor_data(float temperature, float humidity, int pressure, float nox, float co, uint16_t pm0_3, uint16_t pm0_5, uint16_t pm1_0, uint16_t pm2_0, uint16_t pm10_0) {
   JsonDocument doc;
   doc["temperature"] = temperature;
   doc["humidity"] = humidity;
   doc["pressure"] = pressure;
   doc["nox"] = nox;
   doc["co"] = co;
+  doc["pm0_3"] = pm0_3;
+  doc["pm0_5"] = pm0_5;
+  doc["pm1_0"] = pm1_0;
+  doc["pm2_5"] = pm2_0;
+  doc["pm10_0"] = pm10_0;
   String msg = "";
   serializeJson(doc, msg);
   esp_mqtt_client_publish(mqtt_client, "sensors", msg.c_str(), 0, 1, 0);
 }
 
 void loop() {
+  pmsx003data data = sensor.read();
+  if (!data.success) {
+    Serial.println("PMSX003 read failed!");
+    return;
+  }
+  Serial.printf("PM0.3 : %i\n PM0.5: %i\nPM1.0: %i\n PM2.5: %i\n, PM10.0: %i\n",data.particles_03um, data.particles_05um, data.pm10_standard, data.pm25_standard, data.pm100_standard);
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
 
@@ -117,7 +133,7 @@ void loop() {
   float nox = mics4514.get_nox();
   float co = mics4514.get_co();
   Serial.printf("NOX: %f\nCO:%f\n", nox, co);
-  send_sensor_data(temperature, humidity, pressure, nox, co);
+  send_sensor_data(temperature, humidity, pressure, nox, co, data.particles_03um, data.particles_05um, data.pm10_standard, data.pm25_standard, data.pm100_standard);
 
   delay(60000);
 }
